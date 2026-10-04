@@ -1,0 +1,4 @@
+X and Y are fetched from the input SRAM (xyz_data_sram).
+Z is not fetched from SRAM – it is generated inside the CORDIC pipeline.
+
+Yes – the z_in fed into the CORDIC pipeline is hard‑wired to 0 for every operation (MAC, LV, HR, and also for the Soft‑Max exponent unit).

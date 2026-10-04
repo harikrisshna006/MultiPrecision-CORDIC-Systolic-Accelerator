@@ -1,0 +1,29 @@
+`timescale 1ns/1ps
+
+// Runtime precision selects one scalar CORDIC datapath width. The packed
+// interface carries the active-width value in its low bits; lane replication
+// remains the responsibility of simd_lane_mux at the PE boundary.
+module flex_pe_iterative_top (
+    input clk, reset, start,
+    input host_wr_en, input [1:0] host_addr, input [1:0] host_wdata,
+    input [1:0] mode, ctrl_op,
+    input [31:0] x_in, y_in, z_in,
+    output [31:0] result, output done, busy, error_overflow,
+    output [7:0] iteration_count, output [1:0] precision_sel, sel_af
+);
+    af_precision_ctrl cfg(clk,reset,host_wr_en,host_addr,host_wdata,precision_sel,sel_af);
+    wire [31:0] r4,r8,r16,r32; wire d4,d8,d16,d32,b4,b8,b16,b32,e4,e8,e16,e32; wire [7:0] i4,i8,i16,i32;
+    // Paper Pareto points: FxP4 uses four stages; FxP8/FxP16 use
+    // 4 HV and 5 LV/LR stages; FxP32 uses 8 HV, 9 LV, and 10 LR stages.
+    flex_pe_config_fsm #(.WIDTH(4),.FRAC(1),.N_HV_STAGES(4),.N_LV_STAGES(4),.N_LR_STAGES(4)) c4(clk,reset,start&&(precision_sel==0),mode,ctrl_op,sel_af,x_in[3:0],y_in[3:0],z_in[3:0],r4[3:0],b4,d4,e4,i4);
+    flex_pe_config_fsm #(.WIDTH(8),.FRAC(3),.N_HV_STAGES(4),.N_LV_STAGES(5),.N_LR_STAGES(5)) c8(clk,reset,start&&(precision_sel==1),mode,ctrl_op,sel_af,x_in[7:0],y_in[7:0],z_in[7:0],r8[7:0],b8,d8,e8,i8);
+    flex_pe_config_fsm #(.WIDTH(16),.FRAC(7),.N_HV_STAGES(4),.N_LV_STAGES(5),.N_LR_STAGES(5)) c16(clk,reset,start&&(precision_sel==2),mode,ctrl_op,sel_af,x_in[15:0],y_in[15:0],z_in[15:0],r16[15:0],b16,d16,e16,i16);
+    flex_pe_config_fsm #(.WIDTH(32),.FRAC(13),.N_HV_STAGES(8),.N_LV_STAGES(9),.N_LR_STAGES(10)) c32(clk,reset,start&&(precision_sel==3),mode,ctrl_op,sel_af,x_in,y_in,z_in,r32,b32,d32,e32,i32);
+    assign result = (precision_sel==0)?{{28{r4[3]}},r4[3:0]}:
+                    (precision_sel==1)?{{24{r8[7]}},r8[7:0]}:
+                    (precision_sel==2)?{{16{r16[15]}},r16[15:0]}:r32;
+    assign done=(precision_sel==0)?d4:(precision_sel==1)?d8:(precision_sel==2)?d16:d32;
+    assign busy=(precision_sel==0)?b4:(precision_sel==1)?b8:(precision_sel==2)?b16:b32;
+    assign error_overflow=(precision_sel==0)?e4:(precision_sel==1)?e8:(precision_sel==2)?e16:e32;
+    assign iteration_count=(precision_sel==0)?i4:(precision_sel==1)?i8:(precision_sel==2)?i16:i32;
+endmodule
